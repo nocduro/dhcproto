@@ -12,7 +12,7 @@ use crate::{
     decoder::{Decodable, Decoder},
     encoder::{Encodable, Encoder},
     error::{DecodeResult, EncodeResult},
-    v6::{MessageType, RelayMessage},
+    v6::{MessageType, RelayMessageData},
 };
 
 // server can send multiple IA_NA options to request multiple addresses
@@ -120,7 +120,7 @@ pub enum DhcpOption {
     /// Elapsed time in millis
     ElapsedTime(u16),
     /// 9 - <https://datatracker.ietf.org/doc/html/rfc8415#section-21.10>
-    RelayMsg(RelayMessage),
+    RelayMsg(RelayMessageData),
     /// 11 - <https://datatracker.ietf.org/doc/html/rfc8415#section-21.11>
     Authentication(Authentication),
     /// 12 - <https://datatracker.ietf.org/doc/html/rfc8415#section-21.12>
@@ -622,7 +622,7 @@ impl Decodable for DhcpOption {
             OptionCode::ElapsedTime => DhcpOption::ElapsedTime(decoder.read_u16()?),
             OptionCode::RelayMsg => {
                 let mut relay_dec = Decoder::new(decoder.read_slice(len)?);
-                DhcpOption::RelayMsg(RelayMessage::decode(&mut relay_dec)?)
+                DhcpOption::RelayMsg(RelayMessageData::decode(&mut relay_dec)?)
             }
             OptionCode::Authentication => {
                 let mut dec = Decoder::new(decoder.read_slice(len)?);

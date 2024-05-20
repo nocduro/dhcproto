@@ -371,24 +371,142 @@ impl fmt::Display for Message {
     }
 }
 
+/// A Message with MessageType::RelayRepl or MessageType::RelayForw
+/// must have an option `DhcpOption::RelayMessage(RelayMessageData)` that
+/// includes the data to be forwarded to the next relay, or to the client.
+///
+/// Example single relay:
+/// Client - Relay - Server
+///
+/// Acting as the Server:
+///
+/// Client sends Solicit, then Relay packages and sends to Server. Server receives:
+/// ```text
+/// RelayMessage {
+///     msg_type: MessageType::RelayForw
+///     hop_count: 0, // ?
+///     link_addr: Ipv6Addr,
+///     peer_addr: Ipv6Addr,
+///     opts: DhcpOptions [
+///         DhcpOption::RelayMessage(RelayMessageData::Message) {
+///             msg_type: MessageType::Solicit,
+///             xid: [u8; 3],
+///             opts: ...
+///         })
+///     ]
+/// }
+/// ```
+///
+/// Example two relays:
+/// Client - Relay1 - Relay2 - Server
+///
+/// Acting as the Server:
+///
+/// Client sends Solicit, then Relay1 packages and sends to Relay2. Relay2
+/// sends to Server which receives:
+/// ```text
+/// RelayMessage {
+///     msg_type: MessageType::RelayForw
+///     hop_count: 0, // ?
+///     link_addr: Ipv6Addr,
+///     peer_addr: Ipv6Addr,
+///     opts: DhcpOptions [
+///         DhcpOption::RelayMessage(RelayMessageData::RelayMessage) {
+///             msg_type: MessageType::RelayForw,
+///             hop_count: 0, // ?
+///             link_addr: Ipv6Addr,
+///             peer_addr: Ipv6Addr,
+///             opts: DhcpOptions [
+///                 DhcpOption::RelayMessage(RelayMessageData::Message) {
+///                     msg_type: MessageType::Solicit,
+///                     xid: [u8; 3],
+///                     opts: ...
+///                 }
+///             ]
+///         })
+///     ]
+/// }
+/// ```
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RelayMessageData {
+    Relay(RelayMessage),
+    Message(Message),
+}
+
+impl Decodable for RelayMessageData {
+    fn decode(decoder: &mut Decoder<'_>) -> DecodeResult<Self> {
+        let msg_type: MessageType = decoder.peek_u8()?.into();
+        match msg_type {
+            MessageType::RelayForw | MessageType::RelayRepl => {
+                Ok(RelayMessageData::Relay(RelayMessage::decode(decoder)?))
+            }
+            _ => Ok(RelayMessageData::Message(Message::decode(decoder)?)),
+        }
+    }
+}
+
+impl Encodable for RelayMessageData {
+    fn encode(&self, e: &mut Encoder<'_>) -> EncodeResult<()> {
+        match self {
+            RelayMessageData::Relay(msg) => msg.encode(e),
+            RelayMessageData::Message(msg) => msg.encode(e),
+        }
+    }
+}
+
+impl fmt::Display for RelayMessageData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RelayMessageData::Relay(msg) => msg.fmt(f),
+            RelayMessageData::Message(msg) => msg.fmt(f),
+        }
+    }
+}
+
+/// ```text
+/// 0                   1                   2                   3
+/// 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+/// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+/// |    msg-type   |   hop-count   |                               |
+/// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               |
+/// |                                                               |
+/// |                         link-address                          |
+/// |                                                               |
+/// |                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
+/// |                               |                               |
+/// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               |
+/// |                                                               |
+/// |                         peer-address                          |
+/// |                                                               |
+/// |                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
+/// |                               |                               |
+/// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               |
+/// .                                                               .
+/// .            options (variable number and length)   ....        .
+/// |                                                               |
+/// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+///
+///          Figure 3: Relay Agent/Server Message Format
+/// ```
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelayMessage {
     /// message type
     /// <https://datatracker.ietf.org/doc/html/rfc8415#section-7.3>
-    msg_type: MessageType,
+    pub msg_type: MessageType,
     /// hop count
     /// <https://datatracker.ietf.org/doc/html/rfc8415#section-9>
-    hop_count: u8,
+    pub hop_count: u8,
     /// link address
     /// <https://datatracker.ietf.org/doc/html/rfc8415#section-9>
-    link_addr: Ipv6Addr,
+    pub link_addr: Ipv6Addr,
     /// peer address
     /// <https://datatracker.ietf.org/doc/html/rfc8415#section-9>
-    peer_addr: Ipv6Addr,
+    pub peer_addr: Ipv6Addr,
     /// Options
     /// <https://datatracker.ietf.org/doc/html/rfc8415#section-21>
-    opts: DhcpOptions,
+    pub opts: DhcpOptions,
 }
 
 impl RelayMessage {
