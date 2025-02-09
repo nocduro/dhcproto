@@ -480,6 +480,7 @@ impl From<&DhcpOption> for OptionCode {
             // LqClientLink(_) => OptionCode::LqClientLink,
             // RelayId(_) => OptionCode::RelayId,
             // LinkAddress(_) => OptionCode::LinkAddress,
+            O::ClientLinklayerAddress(_) => OptionCode::ClientLinklayerAddr,
             O::Unknown(UnknownOption { code, .. }) => OptionCode::Unknown(*code),
         }
     }

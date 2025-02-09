@@ -161,6 +161,8 @@ pub enum DhcpOption {
     // LqClientLink(_),
     // RelayId(_),
     // LinkAddress(_),
+    /// 79 - <https://datatracker.ietf.org/doc/html/rfc6939>
+    ClientLinklayerAddress(ClientLinklayerAddress),
     /// An unknown or unimplemented option type
     Unknown(UnknownOption),
 }
@@ -548,6 +550,15 @@ impl Encodable for NtpSuboption {
     }
 }
 
+/// Client Link-Layer Address RFC6939
+/// Optionally included by DHCPv6 relay agents
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ClientLinklayerAddress {
+    pub address_type: u16,
+    pub address: Vec<u8>,
+}
+
 /// fallback for options not yet implemented
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -686,6 +697,12 @@ impl Decodable for DhcpOption {
                 }
 
                 DhcpOption::NtpServer(suboptions)
+            }
+            OptionCode::ClientLinklayerAddr => {
+                DhcpOption::ClientLinklayerAddress(ClientLinklayerAddress {
+                    address_type: decoder.read_u16()?,
+                    address: decoder.read_slice(len - 2)?.to_vec(),
+                })
             }
             // not yet implemented
             OptionCode::Unknown(code) => DhcpOption::Unknown(UnknownOption {
@@ -886,6 +903,11 @@ impl Encodable for DhcpOption {
             DhcpOption::Unknown(UnknownOption { data, .. }) => {
                 e.write_u16(data.len() as u16)?;
                 e.write_slice(data)?;
+            }
+            DhcpOption::ClientLinklayerAddress(client_link_layer_address) => {
+                e.write_u16(2 + client_link_layer_address.address.len() as u16)?;
+                e.write_u16(client_link_layer_address.address_type)?;
+                e.write_slice(&client_link_layer_address.address)?;
             }
         };
         Ok(())
