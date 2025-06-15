@@ -1,9 +1,3 @@
-//! Decodable trait & Decoder
-use hickory_proto::{
-    rr::Name,
-    serialize::binary::{BinDecodable, BinDecoder},
-};
-
 use crate::error::{DecodeError, DecodeResult};
 
 use std::{
@@ -200,16 +194,6 @@ impl<'a> Decoder<'a> {
                 )
             })
             .collect())
-    }
-
-    /// Read a list of domain `Name`s
-    pub fn read_domains(&mut self, length: usize) -> DecodeResult<Vec<Name>> {
-        let mut name_decoder = BinDecoder::new(self.read_slice(length)?);
-        let mut names = Vec::new();
-        while let Ok(name) = Name::read(&mut name_decoder) {
-            names.push(name);
-        }
-        Ok(names)
     }
 
     /// Read a bool

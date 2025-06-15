@@ -91,6 +91,3 @@ pub mod encoder;
 pub mod error;
 pub mod v4;
 pub mod v6;
-
-pub use hickory_proto::error::ProtoError as NameError;
-pub use hickory_proto::rr::Name;

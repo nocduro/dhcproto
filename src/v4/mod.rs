@@ -85,7 +85,6 @@ use serde::{Deserialize, Serialize};
 
 pub mod bulk_query;
 mod flags;
-pub mod fqdn;
 mod htype;
 mod opcode;
 mod options;
@@ -523,19 +522,15 @@ impl fmt::Display for Message {
             .field("giaddr", &self.giaddr())
             .field(
                 "chaddr",
-                &hex::encode(self.chaddr())
-                    .chars()
-                    .enumerate()
-                    .flat_map(|(i, c)| {
-                        if i != 0 && i % 2 == 0 {
-                            Some(':')
-                        } else {
-                            None
-                        }
-                        .into_iter()
-                        .chain(std::iter::once(c))
-                    })
-                    .collect::<String>(),
+                &format!(
+                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    self.chaddr()[0],
+                    self.chaddr()[1],
+                    self.chaddr()[2],
+                    self.chaddr()[3],
+                    self.chaddr()[4],
+                    self.chaddr()[5]
+                ),
             )
             .field(
                 "opts",

@@ -466,7 +466,6 @@ impl From<&DhcpOption> for OptionCode {
             O::ReconfMsg(_) => OptionCode::ReconfMsg,
             O::ReconfAccept => OptionCode::ReconfAccept,
             O::DomainNameServers(_) => OptionCode::DomainNameServers,
-            O::DomainSearchList(_) => OptionCode::DomainSearchList,
             O::IAPD(_) => OptionCode::IAPD,
             O::IAPrefix(_) => OptionCode::IAPrefix,
             O::InformationRefreshTime(_) => OptionCode::InformationRefreshTime,

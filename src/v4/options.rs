@@ -5,13 +5,9 @@ use crate::{
     encoder::{Encodable, Encoder},
     error::{DecodeResult, EncodeResult},
     v4::bulk_query,
-    v4::{fqdn, relay},
+    v4::relay,
 };
 
-use hickory_proto::{
-    rr::Name,
-    serialize::binary::{BinDecodable, BinDecoder, BinEncodable, BinEncoder, EncodeMode},
-};
 use ipnet::Ipv4Net;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -110,9 +106,7 @@ dhcproto_macros::declare_codes!(
     // TODO: split user-class into individual classes [len | <class>, ...]
     {77,  UserClass, "User Class Option - <https://www.rfc-editor.org/rfc/rfc3004.html>", (Vec<u8>)},
     {80,  RapidCommit, "Rapid Commit - <https://www.rfc-editor.org/rfc/rfc4039.html>"},
-    {81,  ClientFQDN, "FQDN - <https://datatracker.ietf.org/doc/html/rfc4702>", (fqdn::ClientFQDN)},
     {82,  RelayAgentInformation, "Relay Agent Information - <https://datatracker.ietf.org/doc/html/rfc3046>", (relay::RelayAgentInformation)},
-    {88,  BcmsControllerNames, "Broadcast Multicast Controller Names - <https://www.rfc-editor.org/rfc/rfc4280.html#section-4.1>", (Vec<Name>)},
     {89,  BcmsControllerAddrs, "Broadcast Mutlicast Controller Address - <https://www.rfc-editor.org/rfc/rfc4280.html#section-4.3>", (Vec<Ipv4Addr>)},
     {91,  ClientLastTransactionTime, "client-last-transaction-time - <https://www.rfc-editor.org/rfc/rfc4388.html#section-6.1>", (u32)},
     {92,  AssociatedIp, "associated-ip - <https://www.rfc-editor.org/rfc/rfc4388.html#section-6.1>", (Vec<Ipv4Addr>)},
@@ -120,10 +114,8 @@ dhcproto_macros::declare_codes!(
     {94,  ClientNetworkInterface, "Client Network Interface - <https://www.rfc-editor.org/rfc/rfc4578.html>", (u8, u8, u8)},
     {97,  ClientMachineIdentifier, "Client Machine Identifier - <https://www.rfc-editor.org/rfc/rfc4578.html>", (Vec<u8>)},
     {106, Ipv6OnlyPreferred, "IPv6-Only Preferred - <https://datatracker.ietf.org/doc/html/rfc8925>", (u32)},
-    {114, CaptivePortal, "Captive Portal - <https://datatracker.ietf.org/doc/html/rfc8910>", (url::Url)},
     {116, DisableSLAAC, "Disable Stateless Autoconfig for Ipv4 - <https://datatracker.ietf.org/doc/html/rfc2563>", (AutoConfig)},
     {118, SubnetSelection, "Subnet selection - <https://datatracker.ietf.org/doc/html/rfc3011>", (Ipv4Addr)},
-    {119, DomainSearch, "Domain Search - <https://www.rfc-editor.org/rfc/rfc3397.html>", (Vec<Name>)},
     {121, ClasslessStaticRoute, "Classless Static Route - <https://www.rfc-editor.org/rfc/rfc3442>", (Vec<(Ipv4Net, Ipv4Addr)>)},
     {150, TFTPServerAddress, "TFTP Server Address - <https://www.rfc-editor.org/rfc/rfc5859.html>", (Ipv4Addr)},
     {151, BulkLeaseQueryStatusCode, "BLQ status-code - <https://www.rfc-editor.org/rfc/rfc6926.html#section-6.2.2>", (bulk_query::Code, String)},
@@ -616,7 +608,6 @@ fn decode_inner(
             let mut dec = Decoder::new(decoder.read_slice(len)?);
             RelayAgentInformation(relay::RelayAgentInformation::decode(&mut dec)?)
         }
-        OptionCode::BcmsControllerNames => BcmsControllerNames(decoder.read_domains(len)?),
         OptionCode::BcmsControllerAddrs => BcmsControllerAddrs(decoder.read_ipv4s(len)?),
         OptionCode::ClientLastTransactionTime => ClientLastTransactionTime(decoder.read_u32()?),
         OptionCode::AssociatedIp => AssociatedIp(decoder.read_ipv4s(len)?),
@@ -632,10 +623,8 @@ fn decode_inner(
             ClientMachineIdentifier(decoder.read_slice(len)?.to_vec())
         }
         OptionCode::Ipv6OnlyPreferred => Ipv6OnlyPreferred(decoder.read_u32()?),
-        OptionCode::CaptivePortal => CaptivePortal(decoder.read_str(len)?.parse()?),
         OptionCode::DisableSLAAC => DisableSLAAC(decoder.read_u8()?.try_into()?),
         OptionCode::SubnetSelection => SubnetSelection(decoder.read_ipv4(len)?),
-        OptionCode::DomainSearch => DomainSearch(decoder.read_domains(len)?),
         OptionCode::TFTPServerAddress => TFTPServerAddress(decoder.read_ipv4(len)?),
         OptionCode::BulkLeaseQueryStatusCode => {
             let code = decoder.read_u8()?.into();
@@ -662,21 +651,6 @@ fn decode_inner(
         OptionCode::BulkLeaseQueryDhcpState => BulkLeaseQueryDhcpState(decoder.read_u8()?.into()),
         OptionCode::BulkLeaseQueryDataSource => {
             BulkLeaseQueryDataSource(bulk_query::DataSourceFlags::new(decoder.read_u8()?))
-        }
-        OptionCode::ClientFQDN => {
-            debug_assert!(len >= 3);
-            let flags = decoder.read_u8()?.into();
-            let rcode1 = decoder.read_u8()?;
-            let rcode2 = decoder.read_u8()?;
-
-            let mut name_decoder = BinDecoder::new(decoder.read_slice(len - 3)?);
-            let name = Name::read(&mut name_decoder)?;
-            ClientFQDN(fqdn::ClientFQDN {
-                flags,
-                r1: rcode1,
-                r2: rcode2,
-                domain: name,
-            })
         }
         OptionCode::ClasslessStaticRoute => {
             let mut routes = Vec::new();
@@ -818,21 +792,6 @@ pub fn encode_long_opt_bytes(
     Ok(())
 }
 
-/// Encodes a list of domain `Name`s but chunked into u8::MAX pieces,
-/// where each chunk is prepended by the length of the chunk and the code.
-pub fn encode_long_opt_domains(
-    code: OptionCode,
-    names: &[Name],
-    e: &mut Encoder<'_>,
-) -> EncodeResult<()> {
-    let mut buf = Vec::new();
-    let mut name_encoder = BinEncoder::new(&mut buf);
-    for name in names {
-        name.emit(&mut name_encoder)?;
-    }
-    encode_long_opt_bytes(code, &buf, e)?;
-    Ok(())
-}
 /// Splits `bytes` into chunks of up to u8::MAX / `factor` (255 is the max opt length),
 /// where each chunk is prepended by the length of the chunk and the code.
 ///
@@ -1050,10 +1009,6 @@ impl Encodable for DhcpOption {
                 e.write_u8(*major)?;
                 e.write_u8(*minor)?;
             }
-            O::CaptivePortal(url) => {
-                let url = url.to_string();
-                encode_long_opt_bytes(code, url.as_bytes(), e)?;
-            }
             O::BulkLeaseQueryStatusCode(status_code, msg) => {
                 e.write_u8(code.into())?;
                 let msg = msg.as_bytes();
@@ -1070,28 +1025,6 @@ impl Encodable for DhcpOption {
                 e.write_u8(code.into())?;
                 e.write_u8(1)?;
                 e.write_u8((*src).into())?
-            }
-            O::DomainSearch(names) | O::BcmsControllerNames(names) => {
-                encode_long_opt_domains(code, names, e)?
-            }
-            O::ClientFQDN(fqdn) => {
-                let fqdn::ClientFQDN {
-                    flags,
-                    r1,
-                    r2,
-                    domain,
-                } = fqdn;
-                let mut buf = vec![(*flags).into(), *r1, *r2];
-                if flags.e() {
-                    // emits in canonical format
-                    // start encoding at byte 3 because we had some preamble
-                    let mut name_encoder = BinEncoder::with_offset(&mut buf, 3, EncodeMode::Normal);
-                    domain.emit_as_canonical(&mut name_encoder, true)?;
-                } else {
-                    // TODO: not sure if this is correct
-                    buf.extend(domain.to_ascii().as_bytes());
-                }
-                encode_long_opt_bytes(code, &buf, e)?;
             }
             O::ClasslessStaticRoute(routes) => {
                 let mut buf = Vec::new();
@@ -1409,21 +1342,6 @@ mod tests {
     }
 
     #[test]
-    fn test_captive_portal() -> Result<()> {
-        let mut res = vec![114];
-        let url = "https://foobar.com/".as_bytes(); // note the ending slash
-        res.push(url.len() as u8);
-        res.extend(url);
-
-        test_opt(
-            DhcpOption::CaptivePortal("https://foobar.com".parse()?), // url parse will add trailing slash
-            res,
-        )?;
-
-        Ok(())
-    }
-
-    #[test]
     fn test_rapid_commit() -> Result<()> {
         test_opt(DhcpOption::RapidCommit, vec![80, 0])?;
 
@@ -1461,24 +1379,6 @@ mod tests {
             vec![
                 119, 27, 3, b'e', b'n', b'g', 5, b'a', b'p', b'p', b'l', b'e', 3, b'c', b'o', b'm',
                 0, 9, b'm', b'a', b'r', b'k', b'e', b't', b'i', b'n', b'g', 0xC0, 0x04,
-            ],
-        )?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_client_fqdn() -> Result<()> {
-        test_opt(
-            DhcpOption::ClientFQDN(fqdn::ClientFQDN {
-                flags: fqdn::FqdnFlags::default().set_e(true),
-                r1: 0,
-                r2: 0,
-                domain: Name::from_str("www.google.com.").unwrap(),
-            }),
-            vec![
-                81, 19, 0x04, 0, 0, 3, b'w', b'w', b'w', 6, b'g', b'o', b'o', b'g', b'l', b'e', 3,
-                b'c', b'o', b'm', 0,
             ],
         )?;
 

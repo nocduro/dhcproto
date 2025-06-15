@@ -1,7 +1,3 @@
-use hickory_proto::{
-    rr::Name,
-    serialize::binary::{BinDecodable, BinDecoder, BinEncodable, BinEncoder},
-};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -143,8 +139,6 @@ pub enum DhcpOption {
     ReconfAccept,
     /// 23 - <https://datatracker.ietf.org/doc/html/rfc3646>
     DomainNameServers(Vec<Ipv6Addr>),
-    /// 24 - <https://datatracker.ietf.org/doc/html/rfc3646>
-    DomainSearchList(Vec<Name>),
     /// 25 - <https://datatracker.ietf.org/doc/html/rfc8415#section-21.21>
     IAPD(IAPD),
     /// 26 - <https://datatracker.ietf.org/doc/html/rfc3633#section-10>
@@ -491,11 +485,10 @@ impl Decodable for IAAddr {
 }
 
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum NtpSuboption {
     ServerAddress(Ipv6Addr),
     MulticastAddress(Ipv6Addr),
-    FQDN(Name),
 }
 
 impl Decodable for NtpSuboption {
@@ -515,11 +508,6 @@ impl Decodable for NtpSuboption {
                 };
                 Ok(option)
             }
-            3 => {
-                let len = decoder.read_u16()? as _;
-                let mut name_decoder = BinDecoder::new(decoder.read_slice(len)?);
-                Ok(NtpSuboption::FQDN(Name::read(&mut name_decoder)?))
-            }
             _ => Err(super::DecodeError::IoError(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "invalid ntp suboption code",
@@ -536,14 +524,6 @@ impl Encodable for NtpSuboption {
                 e.write_u16(code)?;
                 e.write_u16(16)?;
                 e.write::<16>(addr.octets())?;
-            }
-            NtpSuboption::FQDN(name) => {
-                let mut buf = Vec::new();
-                let mut name_encoder = BinEncoder::new(&mut buf);
-                name.emit(&mut name_encoder)?;
-                e.write_u16(3)?;
-                e.write_u16(buf.len() as _)?;
-                e.write_slice(&buf)?;
             }
         }
         Ok(())
@@ -679,15 +659,6 @@ impl Decodable for DhcpOption {
             OptionCode::IAPrefix => {
                 let mut dec = Decoder::new(decoder.read_slice(len)?);
                 DhcpOption::IAPrefix(IAPrefix::decode(&mut dec)?)
-            }
-            OptionCode::DomainSearchList => {
-                let mut name_decoder = BinDecoder::new(decoder.read_slice(len)?);
-                let mut names = Vec::new();
-                while let Ok(name) = Name::read(&mut name_decoder) {
-                    names.push(name);
-                }
-
-                DhcpOption::DomainSearchList(names)
             }
             OptionCode::NtpServer => {
                 let mut dec = Decoder::new(decoder.read_slice(len)?);
@@ -858,15 +829,6 @@ impl Encodable for DhcpOption {
                 for addr in addrs {
                     e.write_u128((*addr).into())?;
                 }
-            }
-            DhcpOption::DomainSearchList(names) => {
-                let mut buf = Vec::new();
-                let mut name_encoder = BinEncoder::new(&mut buf);
-                for name in names {
-                    name.emit(&mut name_encoder)?;
-                }
-                e.write_u16(buf.len() as u16)?;
-                e.write_slice(&buf)?;
             }
             DhcpOption::IAPrefix(IAPrefix {
                 preferred_lifetime,
