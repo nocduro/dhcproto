@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, net::Ipv6Addr, ops::RangeInclusive};
 
 use crate::v6::option_codes::OptionCode;
+use crate::v6::DecodeError;
 use crate::{
     decoder::{Decodable, Decoder},
     encoder::{Encodable, Encoder},
@@ -143,6 +144,8 @@ pub enum DhcpOption {
     IAPD(IAPD),
     /// 26 - <https://datatracker.ietf.org/doc/html/rfc3633#section-10>
     IAPrefix(IAPrefix),
+    /// 37 - <https://datatracker.ietf.org/doc/html/rfc4649>
+    RemoteId(RemoteId),
     InformationRefreshTime(u32),
     /// 56 - <https://datatracker.ietf.org/doc/html/rfc5908>
     NtpServer(Vec<NtpSuboption>),
@@ -177,6 +180,13 @@ impl Ord for DhcpOption {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InterfaceId {
     pub id: String,
+}
+
+/// remote id relay option
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RemoteId {
+    pub enterprise_number: u32,
+    pub id: Vec<u8>,
 }
 
 /// vendor options
@@ -660,6 +670,15 @@ impl Decodable for DhcpOption {
                 let mut dec = Decoder::new(decoder.read_slice(len)?);
                 DhcpOption::IAPrefix(IAPrefix::decode(&mut dec)?)
             }
+            OptionCode::RemoteId => {
+                if len < 5 {
+                    return Err(DecodeError::NotEnoughBytes);
+                }
+                DhcpOption::RemoteId(RemoteId {
+                    enterprise_number: decoder.read_u32()?,
+                    id: decoder.read_slice(len - 4)?.to_vec(),
+                })
+            }
             OptionCode::NtpServer => {
                 let mut dec = Decoder::new(decoder.read_slice(len)?);
                 let mut suboptions = Vec::new();
@@ -848,6 +867,11 @@ impl Encodable for DhcpOption {
                 e.write_u8(*prefix_len)?;
                 e.write_u128((*prefix_ip).into())?;
                 e.write_slice(&buf)?;
+            }
+            DhcpOption::RemoteId(remote) => {
+                e.write_u16(4 + remote.id.len() as u16)?;
+                e.write_u32(remote.enterprise_number)?;
+                e.write_slice(&remote.id)?;
             }
             DhcpOption::InformationRefreshTime(time) => {
                 e.write_u16(4)?;

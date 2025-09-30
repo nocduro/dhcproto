@@ -468,6 +468,7 @@ impl From<&DhcpOption> for OptionCode {
             O::DomainNameServers(_) => OptionCode::DomainNameServers,
             O::IAPD(_) => OptionCode::IAPD,
             O::IAPrefix(_) => OptionCode::IAPrefix,
+            O::RemoteId(_) => OptionCode::RemoteId,
             O::InformationRefreshTime(_) => OptionCode::InformationRefreshTime,
             O::NtpServer(_) => OptionCode::NtpServer,
             // SolMaxRt(_) => OptionCode::SolMaxRt,
