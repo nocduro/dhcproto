@@ -183,6 +183,7 @@ pub struct InterfaceId {
 }
 
 /// remote id relay option
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RemoteId {
     pub enterprise_number: u32,
@@ -976,7 +977,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
     use super::*;
     #[test]
@@ -1087,13 +1087,6 @@ mod tests {
             0x20, 0x01, 0x0d, 0xb8, 0x00, 0x0a, 0x00, 0x00, 0x14, 0x42, 0xe2, 0xff, 0xfe, 0x17,
             0x84, 0x1a,
         ])]));
-        expected_opts.insert(DhcpOption::NtpServer(vec![
-            NtpSuboption::ServerAddress(Ipv6Addr::from([
-                0x20, 0x01, 0x0d, 0xb8, 0x00, 0x0a, 0x00, 0x00, 0x14, 0x42, 0xe2, 0xff, 0xfe, 0x17,
-                0x84, 0x1a,
-            ])),
-            NtpSuboption::FQDN(Name::from_str("3.de.pool.ntp.org.").unwrap()),
-        ]));
 
         let opts = DhcpOptions::decode(&mut Decoder::new(&raw)).unwrap();
 

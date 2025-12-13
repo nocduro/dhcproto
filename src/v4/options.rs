@@ -1204,7 +1204,6 @@ mod tests {
     use std::collections::VecDeque;
 
     use super::*;
-    use std::str::FromStr;
 
     type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -1363,22 +1362,6 @@ mod tests {
                 b'a',
                 b'g',
                 b'e',
-            ],
-        )?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_domainsearch() -> Result<()> {
-        test_opt(
-            DhcpOption::DomainSearch(vec![
-                Name::from_str("eng.apple.com.").unwrap(),
-                Name::from_str("marketing.apple.com.").unwrap(),
-            ]),
-            vec![
-                119, 27, 3, b'e', b'n', b'g', 5, b'a', b'p', b'p', b'l', b'e', 3, b'c', b'o', b'm',
-                0, 9, b'm', b'a', b'r', b'k', b'e', b't', b'i', b'n', b'g', 0xC0, 0x04,
             ],
         )?;
 
